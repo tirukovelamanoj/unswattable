@@ -1,0 +1,904 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Unswattable</title>
+<meta name="description" content="Try to swat a fruit fly that dodges you using 1,984 real neurons from the FlyWire connectome, simulated live in your browser.">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%AA%B0%3C/text%3E%3C/svg%3E">
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://fly.manojtirukovela.com/">
+<meta property="og:title" content="Unswattable">
+<meta property="og:description" content="Try to swat a fruit fly that dodges you using 1,984 real neurons from the FlyWire connectome, simulated live in your browser.">
+<meta property="og:image" content="https://fly.manojtirukovela.com/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Unswattable">
+<meta name="twitter:description" content="Try to swat a fruit fly that dodges you using 1,984 real neurons from the FlyWire connectome, simulated live in your browser.">
+<meta name="twitter:image" content="https://fly.manojtirukovela.com/og.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+
+<style>
+  /* Single-theme by intent: this is a microscope field, not a document. */
+  :root{
+    /* Hue carries the mechanism: threat and the cells that detect it share
+       jade; the motor command and the fly it moves share amber. */
+    --void:#0b0711;            /* aubergine ground, not blue-black */
+    --neuropil:#272c3e;        /* the dim brain dust, deliberately hueless */
+    --dim:#4a3a66;
+    --threat:#3fe0a4;          /* the hand, and LC4/LPLC2, which encode it */
+    --relay:#e0609f;           /* interneurons, the nc82 neuropil stain */
+    --command:#ffb545;         /* descending neurons */
+    --fly:#ffd86b;
+    --ink:#ece7f5;
+    --muted:#8a7ba6;
+    --rule:#241a33;
+    --bad:#ff5c7a;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    --cond:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  }
+
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--void); color:var(--ink);
+    font-family:var(--sans); overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  #stage{position:fixed; inset:0; cursor:none; touch-action:none;}
+  #brain,#game{position:absolute; inset:0; width:100%; height:100%; display:block;}
+  #memory{display:block; margin-left:auto;}
+  #mem-reset{pointer-events:auto; margin-top:6px; padding:4px 9px; font-size:10px;}
+  #brain{z-index:0;}
+  #game{z-index:1;}
+
+  .hud{position:fixed; z-index:3; pointer-events:none;}
+
+  /* ---- title block, upper left ---- */
+  #title{top:0; left:0; padding:20px 24px;}
+  #title h1{
+    margin:0; font-family:var(--cond); font-weight:700;
+    font-size:clamp(21px,2.5vw,32px); letter-spacing:-.015em; line-height:1;
+  }
+  #title p{
+    margin:6px 0 0; font-size:12px; line-height:1.5; color:var(--muted);
+  }
+  #title b{color:var(--ink); font-weight:500;}
+
+  /* ---- readout, upper right ---- */
+  #readout{
+    top:0; right:0; padding:22px 24px; text-align:right;
+    font-family:var(--mono); font-variant-numeric:tabular-nums;
+  }
+  .stat{margin-bottom:12px;}
+  .stat .k{font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);}
+  .stat .v{font-size:30px; font-weight:600; line-height:1.05;}
+  .stat .v.hot{color:var(--command);}
+
+  /* ---- instrument rail, bottom ---- */
+  #rail{
+    left:0; right:0; bottom:0; z-index:3;
+    display:flex; align-items:flex-end; justify-content:space-between; gap:20px;
+    padding:0 24px 30px; flex-wrap:wrap;
+    background:linear-gradient(to top,rgba(11,7,17,.93) 30%,rgba(11,7,17,0));
+  }
+  #pops{display:flex; gap:16px; flex-wrap:wrap; font-family:var(--mono);}
+  .pop{min-width:112px;}
+  .pop .name{
+    font-size:11px; font-weight:600; letter-spacing:.08em; display:flex; gap:7px; align-items:center;
+  }
+  .pop .role{font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:3px 0 5px;}
+  .pop .bar{height:3px; background:var(--rule); position:relative; overflow:hidden;}
+  .pop .bar i{position:absolute; inset:0 100% 0 0; transition:right .06s linear;}
+  .dot{width:7px; height:7px; border-radius:50%; flex:none;}
+
+  #lesion{pointer-events:auto; font-family:var(--mono); text-align:right;}
+  #lesion .lbl{font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin-bottom:7px;}
+  #lesion .btns{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;}
+  button{
+    font:inherit; font-size:11px; font-weight:500; letter-spacing:.04em;
+    color:var(--muted); background:transparent;
+    border:1px solid var(--rule); padding:6px 11px; cursor:pointer;
+    transition:color .15s,border-color .15s,background .15s;
+  }
+  button:hover{color:var(--ink); border-color:var(--dim);}
+  button[aria-pressed="true"]{color:var(--bad); border-color:var(--bad); background:rgba(255,92,122,.10);}
+  button:focus-visible{outline:2px solid var(--threat); outline-offset:2px;}
+
+  /* ---- caught overlay ---- */
+  #caught{
+    position:fixed; inset:0; z-index:4; display:none;
+    place-items:center; background:rgba(11,7,17,.85); backdrop-filter:blur(3px);
+    cursor:default;
+  }
+  #caught.on{display:grid;}
+  #caught .box{text-align:center; padding:0 24px;}
+  #caught h2{
+    font-family:var(--cond); font-weight:700; font-size:clamp(34px,7vw,64px);
+    margin:0; letter-spacing:-.02em;
+  }
+  #caught p{color:var(--muted); font-family:var(--mono); font-size:13px; margin:12px 0 22px;}
+  #caught b{color:var(--fly);}
+  #caught button{font-size:13px; padding:10px 20px; color:var(--ink); border-color:var(--dim);}
+
+  #cite{
+    position:fixed; left:24px; bottom:0; z-index:3; pointer-events:auto;
+    font-family:var(--mono); font-size:9.5px; color:#5c4b78; padding-bottom:6px;
+  }
+  #cite a{color:#8a7ba6;}
+
+  #boot{
+    position:fixed; inset:0; z-index:5; display:grid; place-items:center;
+    background:var(--void); font-family:var(--mono); font-size:12px;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+    transition:opacity .5s;
+  }
+  #boot.gone{opacity:0; pointer-events:none;}
+
+  @media (max-width:640px){
+    #title p{font-size:11.5px;}
+    .stat .v{font-size:22px;}
+    #pops{gap:14px;}
+    .pop{min-width:78px;}
+    #rail{padding:0 16px 26px; gap:12px;}
+    #title,#readout{padding:16px;}
+    #cite{left:16px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition-duration:.01ms !important;}
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="brain"></canvas>
+  <canvas id="game"></canvas>
+</div>
+
+<div class="hud" id="title">
+  <h1>Unswattable</h1>
+  <p>A real fly brain dodges your cursor.</p>
+</div>
+
+<div class="hud" id="readout">
+  <div class="stat"><div class="k">Escapes</div><div class="v" id="n-esc">0</div></div>
+  <div class="stat"><div class="k">Survived</div><div class="v" id="n-time">0.0<span style="font-size:15px;color:var(--muted)">s</span></div></div>
+  <div class="stat"><div class="k">Reflex gain</div><div class="v hot" id="n-gain">1.00</div></div>
+  <div class="stat" style="margin-top:16px">
+    <div class="k">Learned threat map</div>
+    <canvas id="memory" width="200" height="200"
+            style="width:100px;height:100px;margin-top:6px"></canvas>
+    <div class="k" id="mem-note" style="margin-top:2px;color:#5c4b78">naive</div>
+    <button type="button" id="mem-reset" title="Restore every KC to MBON synapse to its unlearned weight">Reset memory</button>
+    <div class="k" style="margin-top:6px;color:#463a5e;letter-spacing:.06em">gain coupling: modelled</div>
+  </div>
+</div>
+
+<div class="hud" id="rail">
+  <div id="pops"></div>
+  <div id="lesion">
+    <div class="lbl">Lesion: silence a population</div>
+    <div class="btns" id="lesion-btns"></div>
+  </div>
+</div>
+
+<div id="cite">FlyWire FAFB v783 &middot; Dorkenwald et al., <i>Nature</i> 2024 &middot; CC-BY &middot; 1,984 neurons, 17,716 synapses, 3,988 plastic &middot; Kenyon direction code and threat gain are modelled, not traced</div>
+
+<div id="caught">
+  <div class="box">
+    <h2>Got it.</h2>
+    <p>You lasted <b id="c-time">0.0s</b> and it escaped <b id="c-esc">0</b> times.</p>
+    <button id="again" type="button">Release another fly</button>
+  </div>
+</div>
+
+<div id="boot">Loading connectome&hellip;</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+// ───────────────────────── physiology (Drosophila LIF, Shiu et al. style)
+const V_REST=-52, V_TH=-45, V_RESET=-52, TAU_M=20, DT=0.5, REFRAC=2.2;
+const W_SCALE=0.016;          // mV per synapse
+const SUBSTEPS=18;            // 9 ms of brain time per frame, near real-time
+const LOOM_DRIVE=0.95;        // mV/step at maximum expansion rate
+const RF_SIGMA=0.55;
+const KC_SIGMA=0.085;      // Kenyon tuning width, tight enough to keep the code sparse
+const KC_DRIVE=1.35;
+const DAN_DRIVE=1.6;
+const LEARN_RATE=0.055;    // per-frame depression while dopamine and KC coincide
+const PW_FLOOR=0.22;
+const LEARN_BOOST=1.7;
+const SELF_FLOW=0.18;      // how much self-generated optic flow survives efference copy
+const SWAT_ANG=Math.PI*0.3;   // fixed grip angle, the swatter does not swivel
+// Handle length as a multiple of paddle width. Real swatters sit near 3.5:1
+// (a ~35cm handle on a ~10cm paddle); this is deliberately half that, which
+// reads better at the size the paddle is drawn here. The paddle half-width is
+// pinned to the catch radius, so the handle follows from the ratio.
+const HANDLE_RATIO=1.75;
+const STILL_SPEED=240;     // px/s below which an object reads as scenery, not threat     // see note at applyLearnedGain: designed coupling, not traced
+
+const POPS=[
+  {id:"loom",  label:"LC4 &middot; LPLC2", role:"looming detectors", col:[0.25,0.88,0.64], types:["LC4","LPLC2"]},
+  {id:"wide",  label:"LPLC1 &middot; LC6", role:"wide-field visual", col:[0.17,0.68,0.53], types:["LPLC1","LC6"]},
+  {id:"inter", label:"interneurons", role:"central brain",    col:[0.88,0.38,0.62], types:null},
+  {id:"kc",    label:"Kenyon cells",role:"mushroom body",     col:[0.52,0.48,0.72], flag:"is_kc"},
+  {id:"mbon",  label:"MBON",        role:"learned output",    col:[0.55,0.50,0.91], flag:"is_mbon"},
+  {id:"dan",   label:"DAN",         role:"dopamine, teaching", col:[1.00,0.30,0.42], flag:"is_dan"},
+  {id:"turn",  label:"DNa02",       role:"steering command",  col:[1.00,0.78,0.40], types:["DNa02"]},
+  {id:"gf",    label:"DNp01 + esc.",role:"giant fiber &middot; takeoff", col:[1.00,0.71,0.27],
+   types:["DNp01","DNp02","DNp03","DNp04","DNp11"]},
+];
+
+// ───────────────────────── boot
+const bootEl=document.getElementById("boot");
+const b64=(s,T)=>{const bin=atob(s);const u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new T(u.buffer);};
+
+fetch("flydata.json").then(r=>r.json()).then(start).catch(e=>{
+  bootEl.textContent="Could not load connectome data.";console.error(e);
+});
+
+function start(D){
+  // ---- unpack
+  const N=D.n;
+  const pos=b64(D.pos,Float32Array);        // N*3, normalised
+  const rf =b64(D.rf ,Float32Array);        // N*2, azimuth/elevation (-9 = none)
+  const pre=b64(D.pre,Uint16Array);
+  const post=b64(D.post,Uint16Array);
+  const wRaw=b64(D.w,Int16Array);
+  const bgQ=b64(D.bg,Int16Array);
+  const kcPref=b64(D.kc_pref,Float32Array);
+  const plasticFlag=b64(D.plastic,Uint8Array);
+  const E=D.n_edges;
+  const typeName=i=>D.types[D.type_of[i]];
+
+  // ---- population index per neuron
+  const popOf=new Int8Array(N);
+  const byType=new Map();
+  POPS.forEach((p,i)=>{ if(p.types) p.types.forEach(t=>byType.set(t,i)); });
+  const INTER=POPS.findIndex(p=>p.types===null);
+  for(let i=0;i<N;i++){
+    let p=-1;
+    POPS.forEach((q,qi)=>{ if(q.flag && D[q.flag][i]) p=qi; });
+    if(p<0){const t=byType.get(typeName(i)); p=(t===undefined)?INTER:t;}
+    popOf[i]=p;
+  }
+  const P_LOOM=0,P_TURN=POPS.findIndex(p=>p.id==="turn"),P_GF=POPS.findIndex(p=>p.id==="gf");
+
+  const loomIdx=[],gfIdx=[],turnL=[],turnR=[],kcIdx=[],danIdx=[],mbonIdx=[];
+  for(let i=0;i<N;i++){
+    if(D.is_kc[i]) kcIdx.push(i);
+    if(D.is_dan[i]) danIdx.push(i);
+    if(D.is_mbon[i]) mbonIdx.push(i);
+  }
+  for(let i=0;i<N;i++){
+    if(popOf[i]===P_LOOM && rf[i*2]>-5) loomIdx.push(i);
+    if(popOf[i]===P_GF) gfIdx.push(i);
+    if(popOf[i]===P_TURN)(D.side[i]===0?turnL:turnR).push(i);
+  }
+
+  // ---- CSR by post for fast accumulation
+  const wMv=new Float32Array(E);
+  for(let e=0;e<E;e++) wMv[e]=wRaw[e]*W_SCALE;
+  // The KC->MBON synapses are the one plastic site in the fly brain. Each keeps a
+  // learned multiplier that dopamine can depress; everything else stays frozen.
+  const wEff=new Float32Array(wMv);
+  const pw=new Float32Array(E).fill(1);
+  const plasticIdx=[];
+  for(let e=0;e<E;e++) if(plasticFlag[e]) plasticIdx.push(e);
+
+  // ───────────────────────── state
+  const V=new Float32Array(N), refr=new Float32Array(N), spike=new Uint8Array(N);
+  const act=new Float32Array(N);              // smoothed activity, drives the visuals
+  const drive=new Float32Array(N);
+  const lesioned=new Uint8Array(POPS.length);
+  let popRate=new Float32Array(POPS.length);
+  function resetBrain(){V.fill(V_REST);refr.fill(0);spike.fill(0);act.fill(0);}
+  resetBrain();
+
+  const _I=new Float32Array(N), fired=new Float32Array(N), _cnt=new Float32Array(POPS.length);
+  function brainStep(){
+    fired.fill(0);
+    for(let s=0;s<SUBSTEPS;s++){
+      _I.fill(0);
+      for(let e=0;e<E;e++){ if(spike[pre[e]]) _I[post[e]]+=wEff[e]; }
+      for(let i=0;i<N;i++){
+        if(lesioned[popOf[i]]){V[i]=V_REST;spike[i]=0;continue;}
+        if(refr[i]>0){refr[i]-=DT;spike[i]=0;continue;}
+        V[i]+=(DT/TAU_M)*(V_REST-V[i])+_I[i]+drive[i];
+        if(V[i]>=V_TH){V[i]=V_RESET;refr[i]=REFRAC;spike[i]=1;fired[i]++;}
+        else spike[i]=0;
+      }
+    }
+    popRate.fill(0);_cnt.fill(0);
+    for(let i=0;i<N;i++){
+      act[i]=Math.min(1,act[i]*0.68+fired[i]*0.42);
+      popRate[popOf[i]]+=fired[i];_cnt[popOf[i]]++;
+    }
+    for(let p=0;p<POPS.length;p++) popRate[p]=_cnt[p]?popRate[p]/_cnt[p]:0;
+  }
+
+  // ───────────────────────── three.js scene
+  const cvB=document.getElementById("brain");
+  const renderer=new THREE.WebGLRenderer({canvas:cvB,antialias:false,alpha:true});
+  const DPR=Math.min(devicePixelRatio||1,2);
+  renderer.setPixelRatio(DPR);
+  const scene=new THREE.Scene();
+  const CAM_Z=2.45;
+  const camera=new THREE.PerspectiveCamera(46,1,0.1,50);
+  camera.position.set(0,0,CAM_Z);
+  const world=new THREE.Group(); scene.add(world);
+
+  // background cloud, the whole brain, for shape
+  {
+    const p=new Float32Array(D.bg_n*3);
+    for(let i=0;i<D.bg_n*3;i+=3){p[i]=bgQ[i]/32767;p[i+1]=-bgQ[i+1]/32767;p[i+2]=bgQ[i+2]/32767;}
+    const g=new THREE.BufferGeometry();
+    g.setAttribute("position",new THREE.BufferAttribute(p,3));
+    world.add(new THREE.Points(g,new THREE.PointsMaterial({
+      color:0x272c3e,size:1.0*DPR,sizeAttenuation:false,
+      transparent:true,opacity:0.105,depthWrite:false,blending:THREE.AdditiveBlending})));
+  }
+
+  // circuit edges, real synapses, dim until they carry signal
+  let edgeGeo,edgeCol;
+  {
+    const p=new Float32Array(E*6); edgeCol=new Float32Array(E*6);
+    for(let e=0;e<E;e++){
+      const a=pre[e]*3,b=post[e]*3,o=e*6;
+      p[o]=pos[a];p[o+1]=-pos[a+1];p[o+2]=pos[a+2];
+      p[o+3]=pos[b];p[o+4]=-pos[b+1];p[o+5]=pos[b+2];
+    }
+    edgeGeo=new THREE.BufferGeometry();
+    edgeGeo.setAttribute("position",new THREE.BufferAttribute(p,3));
+    edgeGeo.setAttribute("color",new THREE.BufferAttribute(edgeCol,3));
+    world.add(new THREE.LineSegments(edgeGeo,new THREE.LineBasicMaterial({
+      vertexColors:true,transparent:true,opacity:0.40,
+      depthWrite:false,blending:THREE.AdditiveBlending})));
+  }
+
+  // circuit neurons, glow with activation
+  let actAttr,neuronMat;
+  {
+    const p=new Float32Array(N*3),c=new Float32Array(N*3),a=new Float32Array(N);
+    for(let i=0;i<N;i++){
+      p[i*3]=pos[i*3];p[i*3+1]=-pos[i*3+1];p[i*3+2]=pos[i*3+2];
+      const col=POPS[popOf[i]].col;
+      c[i*3]=col[0];c[i*3+1]=col[1];c[i*3+2]=col[2];
+    }
+    const g=new THREE.BufferGeometry();
+    g.setAttribute("position",new THREE.BufferAttribute(p,3));
+    g.setAttribute("baseCol",new THREE.BufferAttribute(c,3));
+    actAttr=new THREE.BufferAttribute(a,1); actAttr.setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute("act",actAttr);
+    const mat=neuronMat=new THREE.ShaderMaterial({
+      uniforms:{uPix:{value:DPR*2.5}},
+      transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+      vertexShader:`
+        attribute float act; attribute vec3 baseCol;
+        varying vec3 vCol; varying float vAct; uniform float uPix;
+        void main(){
+          vAct=act;
+          vCol=mix(baseCol,vec3(1.0,0.97,0.92),act*0.72);
+          vec4 mv=modelViewMatrix*vec4(position,1.0);
+          gl_PointSize=(2.1+act*17.0)*uPix/(-mv.z);
+          gl_Position=projectionMatrix*mv;
+        }`,
+      fragmentShader:`
+        varying vec3 vCol; varying float vAct;
+        void main(){
+          float r=length(gl_PointCoord-0.5);
+          if(r>0.5) discard;
+          float f=smoothstep(0.5,0.0,r);
+          gl_FragColor=vec4(vCol,f*(0.075+vAct*1.0));
+        }`
+    });
+    world.add(new THREE.Points(g,mat));
+  }
+
+  // ───────────────────────── game layer
+  const cvG=document.getElementById("game"), ctx=cvG.getContext("2d");
+  // neuronMat is assigned during scene build above
+  let W=0,H=0;
+  function resize(){
+    W=innerWidth;H=innerHeight;
+    renderer.setSize(W,H,false);
+    camera.aspect=W/H;
+    const th=Math.tan(camera.fov*Math.PI/360);
+    camera.position.z=Math.min(5.0,Math.max(2.55,Math.max(1.58/(th*camera.aspect),1.14/th)));
+    camera.updateProjectionMatrix();
+    cvG.width=W*DPR;cvG.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener("resize",resize); resize();
+
+  // Paddle half-width. The catch test below matches this drawn shape exactly, so
+  // anything touching the mesh is caught, corners included.
+  // 20, not 18: matching the old circle's AREA (which meant 18) quietly made the
+  // game much harder, because interception depends on reach along the approach
+  // direction, not on area. Matching its REACH is the invariant that matters.
+  const REACH=20;
+  const CORNER=0.34;                    // corner radius as a fraction of REACH
+  const HANDLE_LEN=REACH*2*HANDLE_RATIO; // paddle is 2*REACH wide, so this holds the ratio
+  const HAND_R=64;                      // apparent size of the hand, for looming
+  const reduced=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  const fly={x:0,y:0,vx:0,vy:0,head:0};
+  function placeFly(){
+    for(let a=0;a<24;a++){                       // never spawn under the pointer
+      fly.x=90+Math.random()*(W-180);
+      fly.y=H*0.22+Math.random()*(H*0.56);
+      if(!hand.seen||Math.hypot(fly.x-hand.x,fly.y-hand.y)>Math.min(300,W*0.3)) break;
+    }
+    fly.vx=0;fly.vy=0;fly.head=Math.random()*6.2832;
+  }
+  const hand={x:-999,y:-999,px:-999,py:-999,vx:0,vy:0,seen:false};   // 1:1 with the pointer, no input lag
+  let escapes=0, t0=performance.now(), gain=1.0, caught=false;
+  let lastEscape=-9, trail=[], sparks=[];
+  placeFly();
+  const kcTrace=new Float32Array(N);
+  let lastAz=0, learnPulse=0;
+  const learnedGainOf=az=>binLearned[Math.min(11,Math.max(0,Math.floor((az+1)/2*12)))%12];
+  let wanderHead=Math.random()*6.28, nextSaccade=0, perchUntil=0, alert=0, boostUntil=0;
+
+  function reset(){
+      escapes=0;t0=performance.now();gain=1.0;caught=false;trail=[];sparks=[];
+    resetBrain();document.getElementById("caught").classList.remove("on");
+  }
+
+  function onMove(e){
+    const t=e.touches?e.touches[0]:e;
+    hand.x=t.clientX;hand.y=t.clientY;hand.seen=true;
+  }
+  addEventListener("mousemove",onMove,{passive:true});
+  addEventListener("touchmove",onMove,{passive:true});
+  addEventListener("touchstart",onMove,{passive:true});
+
+  // ───────────────────────── sensory encoding: what the fly actually sees
+  // Looming = rate of angular expansion of the hand on the retina. That is the
+  // quantity LC4 and LPLC2 encode, so it is the quantity we inject.
+  function encode(dt){
+    drive.fill(0);
+    if(!hand.seen||caught) return 0;
+    const dx=hand.x-fly.x, dy=hand.y-fly.y;
+    const dist=Math.max(Math.hypot(dx,dy),12);
+    const ux=dx/dist, uy=dy/dist;
+
+    // EFFERENCE COPY. A fly cancels the optic flow produced by its own flight,
+    // so an object it happens to fly past is scenery, not a threat. Split the
+    // closing speed into the part the hand caused and the part the fly caused,
+    // and keep only a residue of its own. Without this the fly panics at a
+    // stationary cursor it flew into, which is both wrong and looks scripted.
+    const closeExternal = -(hand.vx*ux + hand.vy*uy);
+    const closeSelf     =  (fly.vx*ux + fly.vy*uy);
+    const closing = closeExternal + closeSelf*SELF_FLOW;
+
+    // angular expansion rate of a disc of radius HAND_R at that closing speed
+    const expansion = Math.max(0, 2*HAND_R*closing/(dist*dist + HAND_R*HAND_R));
+
+    // raw angular size still matters, but only for something that is moving.
+    // this is what stops you gluing a motionless pointer onto the fly.
+    const theta = 2*Math.atan(HAND_R/dist);
+    const moving = Math.min(1, Math.hypot(hand.vx,hand.vy)/STILL_SPEED);
+    const sizeTerm = Math.max(0,Math.min(1,(theta-0.36)/1.05))*moving;
+
+    const loom = Math.min(1, expansion/2.4 + sizeTerm*0.9);
+    if(loom<=0.001) return 0;
+
+    let rel=Math.atan2(dy,dx)-fly.head;
+    while(rel>Math.PI)rel-=2*Math.PI; while(rel<-Math.PI)rel+=2*Math.PI;
+    const az=rel/Math.PI;                         // retinotopic, for LC4/LPLC2
+    const azAbs=Math.atan2(dy,dx)/Math.PI;        // world frame, for the Kenyon code
+    const el=Math.max(-1,Math.min(1,-dy/(H*0.45)));
+
+    for(let k=0;k<kcIdx.length;k++){
+      const i=kcIdx[k]; let d=azAbs-kcPref[i];
+      if(d>1)d-=2; else if(d<-1)d+=2;
+      drive[i]=KC_DRIVE*Math.exp(-(d*d)/(2*KC_SIGMA*KC_SIGMA))*Math.min(1,loom*2.2);
+    }
+    lastAz=azAbs;
+
+    // DESIGNED COUPLING, NOT A TRACED PATHWAY.
+    // In the connectome the only MBON output reaching this circuit is MBON31/32
+    // onto DNa02, which steers. Nothing in the mushroom body touches DNp01, so a
+    // learned change cannot alter the escape THRESHOLD through real wiring. This
+    // line makes it do so anyway: learned danger for the current bearing raises
+    // the looming gain, so the fly bolts earlier from directions it has been hurt
+    // from. Everything upstream of it is real; this step is modelled.
+    const learnedGain=1+LEARN_BOOST*learnedGainOf(azAbs);
+
+    const amp=LOOM_DRIVE*loom*gain*learnedGain;
+    for(let k=0;k<loomIdx.length;k++){
+      const i=loomIdx[k];
+      const side=D.side[i]?1:-1;                    // right lobe sees the right hemifield
+      const cAz=side*0.5+rf[i*2]*0.5;
+      const dAz=az-cAz, dEl=el-rf[i*2+1];
+      drive[i]=amp*Math.exp(-(dAz*dAz+dEl*dEl)/(2*RF_SIGMA*RF_SIGMA));
+    }
+    return loom;
+  }
+
+  // The swatter catches with its whole mesh, handle excluded. Rotate the fly into
+  // the paddle's frame and test the same rounded square that gets drawn, so a fly
+  // sitting visibly on the mesh can never be counted as a miss.
+  function onMesh(){
+    if(!hand.seen||caught) return false;
+    const dx=fly.x-hand.x, dy=fly.y-hand.y;
+    const c=Math.cos(SWAT_ANG), sn=Math.sin(SWAT_ANG);
+    const px=dx*c+dy*sn, py=-dx*sn+dy*c;
+    // No forgiveness band: the drawn mesh is exactly the catch area. A pad here
+    // is invisible area, and it silently made the game 18% easier when I tried it.
+    const R=REACH, r=R*CORNER, inner=R-r;
+    const ax=Math.abs(px), ay=Math.abs(py);
+    if(ax>R||ay>R) return false;
+    if(ax<=inner||ay<=inner) return true;
+    const ex=ax-inner, ey=ay-inner;
+    return ex*ex+ey*ey<=r*r;
+  }
+
+  // ───────────────────────── motor readout: descending neurons move the fly
+  function motor(){
+    let gf=0; for(const i of gfIdx) gf+=fired[i];
+    let l=0,r=0;
+    for(const i of turnL) l+=act[i];
+    for(const i of turnR) r+=act[i];
+    return {escape:gf/(Math.max(gfIdx.length,1)*1.6), turn:(r-l)};
+  }
+
+  // ───────────────────────── loop
+  let last=performance.now();
+  function frame(now){
+    const dt=Math.min((now-last)/1000,0.05); last=now;
+    requestAnimationFrame(frame);
+
+    if(!caught){
+      if(hand.seen){                        // hand velocity, smoothed, for efference copy
+        const ivx=(hand.x-hand.px)/Math.max(dt,1e-3), ivy=(hand.y-hand.py)/Math.max(dt,1e-3);
+        hand.vx+=(ivx-hand.vx)*0.35; hand.vy+=(ivy-hand.vy)*0.35;
+        hand.px=hand.x; hand.py=hand.y;
+      }
+      const loom=encode(dt);
+      alert=Math.max(alert*0.90,loom);
+
+      // a near miss is the punishment. drive the real dopaminergic neurons with it.
+      const closeCall=hand.seen && Math.hypot(hand.x-fly.x,hand.y-fly.y)<78;
+      if(closeCall) for(const i of danIdx) drive[i]=DAN_DRIVE;
+      brainStep();
+
+      // eligibility trace: a Kenyon cell's calcium outlasts its spike, which is what
+      // lets a later dopamine pulse find the synapses that were just active.
+      for(const i of kcIdx) kcTrace[i]=Math.max(kcTrace[i]*0.90,Math.min(1,fired[i]*0.5));
+      let danRate=0; for(const i of danIdx) danRate+=fired[i];
+      danRate/=Math.max(danIdx.length,1);
+      if(danRate>0.05){
+        for(const e of plasticIdx){
+          const tr=kcTrace[pre[e]];
+          if(tr>0.08){
+            pw[e]=Math.max(PW_FLOOR,pw[e]-LEARN_RATE*tr*Math.min(1,danRate*6));
+            wEff[e]=wMv[e]*pw[e];
+          }
+        }
+        learnPulse=1;
+      }
+      learnPulse*=0.92;
+
+      const m=motor();
+
+      // flight: flies fly in straight dashes broken by rapid saccadic turns,
+      // and periodically settle. The pauses are your only chance to close in.
+      const tt=now/1000;
+      // alarmed: a startled fly does not resume strolling, it flies evasively ,
+      // fast, with violent saccades. That is what defeats a sustained chase.
+      const alarmed=(alert>0.12)||(tt-lastEscape<1.3);
+      if(tt>nextSaccade){
+        if(!alarmed && Math.random()<0.28){ perchUntil=tt+0.5+Math.random()*1.1; }
+        wanderHead+=(Math.random()-0.5)*(alarmed?3.6:2.6);
+        nextSaccade=tt+(alarmed?0.10+Math.random()*0.16:0.30+Math.random()*0.75);
+      }
+      const cruise=(tt<perchUntil)?110:(alarmed?7200:1150);
+      fly.vx+=Math.cos(wanderHead)*cruise*dt;
+      fly.vy+=Math.sin(wanderHead)*cruise*dt;
+
+      // escape: giant fiber firing launches the fly away from the threat
+      if(m.escape>0.18 && now/1000-lastEscape>0.22){
+        const dx=fly.x-hand.x, dy=fly.y-hand.y, d=Math.max(Math.hypot(dx,dy),1);
+        const bias=Math.max(-1,Math.min(1,m.turn*0.6));
+        const lateral=(bias!==0?Math.sign(bias):(Math.random()<0.5?-1:1))*(0.42+Math.random()*0.38);
+        let ang=Math.atan2(dy,dx)+bias*1.25+lateral;
+        // steer toward open space when pinned near an edge
+        const edge=Math.min(fly.x,W-fly.x,fly.y,H-fly.y);
+        if(edge<180){
+          const cx=W*0.5-fly.x, cy=H*0.5-fly.y, cl=Math.hypot(cx,cy)||1;
+          const pull=(1-edge/180)*1.05;
+          ang=Math.atan2(Math.sin(ang)+cy/cl*pull, Math.cos(ang)+cx/cl*pull);
+        }
+        const power=1250+1150*m.escape;
+        fly.vx+=Math.cos(ang)*power; fly.vy+=Math.sin(ang)*power;
+        escapes++; lastEscape=now/1000; boostUntil=now/1000+0.42;
+        gain=Math.min(1.9,gain+0.055);              // sensitisation after a scare
+        for(let i=0;i<14;i++)
+          sparks.push({x:fly.x,y:fly.y,a:Math.random()*6.28,s:60+Math.random()*220,l:1});
+      }
+      gain=Math.max(1.0,gain-0.035*dt);             // habituation when left alone
+
+      const drag=(now/1000<boostUntil)?0.978:0.92;   // low drag while bolting
+      fly.vx*=drag; fly.vy*=drag;
+      fly.x+=fly.vx*dt; fly.y+=fly.vy*dt;
+      let hitWall=false;
+      if(fly.x<26){fly.x=26;fly.vx=Math.abs(fly.vx)*0.6;hitWall=true;}
+      if(fly.x>W-26){fly.x=W-26;fly.vx=-Math.abs(fly.vx)*0.6;hitWall=true;}
+      if(fly.y<26){fly.y=26;fly.vy=Math.abs(fly.vy)*0.6;hitWall=true;}
+      if(fly.y>H-26){fly.y=H-26;fly.vy=-Math.abs(fly.vy)*0.6;hitWall=true;}
+      if(hitWall){wanderHead=Math.atan2(fly.vy,fly.vx)+(Math.random()-0.5)*0.8;nextSaccade=tt+0.35;boostUntil=0;}
+      if(Math.hypot(fly.vx,fly.vy)>4) fly.head=Math.atan2(fly.vy,fly.vx);
+
+      trail.push({x:fly.x,y:fly.y,l:1});
+      if(trail.length>26) trail.shift();
+
+      if(onMesh()) doCaught();
+      updateHud(loom);
+      if(loom>0.02) perchUntil=0;   // a startled fly does not sit still
+    }
+
+    // visuals
+    for(let i=0;i<N;i++) actAttr.array[i]=act[i];
+    actAttr.needsUpdate=true;
+    paintEdges();
+
+    const wob=reduced?0:Math.sin(now/5200)*0.30;
+    world.rotation.y=wob; world.rotation.x=-0.10+(reduced?0:Math.sin(now/7100)*0.05);
+    renderer.render(scene,camera);
+    draw2d(now);
+  }
+
+  function paintEdges(){
+    const a=edgeCol;
+    for(let e=0;e<E;e++){
+      const v=act[pre[e]]*0.85, o=e*6;
+      const base=0.019;
+      const cp=POPS[popOf[pre[e]]].col;
+      const r=base*cp[0]+v*cp[0], g=base*cp[1]+v*cp[1], b=base*cp[2]+v*cp[2];
+      a[o]=r;a[o+1]=g;a[o+2]=b; a[o+3]=r*0.3;a[o+4]=g*0.3;a[o+5]=b*0.3;
+    }
+    edgeGeo.attributes.color.needsUpdate=true;
+  }
+
+  // True circular corners via arcTo, not quadratic curves. A quadratic corner
+  // bulges slightly fatter than a quarter circle, and onMesh() tests a quarter
+  // circle, so Beziers left a thin band of drawn mesh that could not catch.
+  function paddlePath(R,r){
+    ctx.beginPath();
+    ctx.moveTo(-R+r,-R);
+    ctx.arcTo( R,-R,  R, R, r);
+    ctx.arcTo( R, R, -R, R, r);
+    ctx.arcTo(-R, R, -R,-R, r);
+    ctx.arcTo(-R,-R,  R,-R, r);
+    ctx.closePath();
+  }
+  function rrect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+    ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+    ctx.closePath();
+  }
+
+  // ───────────────────────── 2D overlay: the fly, the hand, the strike
+  function draw2d(now){
+    ctx.clearRect(0,0,W,H);
+
+    // the swatter. the paddle's mid-edge sits exactly on the catch radius, so
+    // what you see is very close to what it can actually hit (hit test stays circular); the wide soft glow is the apparent size the fly's
+    // looming detectors respond to, which is much larger.
+    if(hand.seen&&!caught){
+      const g=ctx.createRadialGradient(hand.x,hand.y,0,hand.x,hand.y,HAND_R);
+      g.addColorStop(0,"rgba(63,224,164,.15)");
+      g.addColorStop(.55,"rgba(63,224,164,.05)");
+      g.addColorStop(1,"rgba(63,224,164,0)");
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(hand.x,hand.y,HAND_R,0,6.2832);ctx.fill();
+
+      const R=REACH, HL=HANDLE_LEN;
+      const jade=a=>`rgba(63,224,164,${a})`;
+      ctx.save(); ctx.translate(hand.x,hand.y); ctx.rotate(SWAT_ANG);
+      ctx.lineCap="round"; ctx.lineJoin="round";
+
+      // Handle: a SOLID strip with the hang hole genuinely punched through it,
+      // via even-odd fill. An outlined strip read as a wireframe, not an object.
+      const hw=3.0, x0=R*0.5, x1=R+HL;
+      ctx.beginPath();
+      (function(x,y,w,h,r){
+        ctx.moveTo(x+r,y);
+        ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+        ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+        ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+        ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+        ctx.closePath();
+      })(x0,-hw,x1-x0,hw*2,hw);
+      ctx.moveTo(x1-9+4.2,0);
+      ctx.ellipse(x1-9,0,4.2,1.8,0,0,6.2832);
+      ctx.fillStyle=jade(.88); ctx.fill("evenodd");
+
+      // Paddle ribs: thick and solid, with the gaps left as actual gaps. Rib to
+      // hole ratio is about 1:3, which is what moulded swatters run.
+      ctx.save();
+      paddlePath(R,R*CORNER); ctx.clip();
+      const hubx=R*0.9, A0=Math.PI*0.40, A1=Math.PI*1.60;
+      ctx.strokeStyle=jade(.90); ctx.lineWidth=2.2;
+      for(let i=0;i<=6;i++){
+        const a=A0+(A1-A0)*i/6;
+        ctx.beginPath(); ctx.moveTo(hubx,0);
+        ctx.lineTo(hubx+Math.cos(a)*R*3.2, Math.sin(a)*R*3.2); ctx.stroke();
+      }
+      for(let rr=R*0.52; rr<R*2.45; rr+=R*0.42){
+        ctx.beginPath(); ctx.arc(hubx,0,rr,A0,A1); ctx.stroke();
+      }
+      ctx.restore();
+
+      // rim, thicker than the ribs, as a moulded frame is
+      paddlePath(R,R*CORNER);
+      ctx.strokeStyle=jade(.95); ctx.lineWidth=3; ctx.stroke();
+
+      // solid hub where the handle meets the frame. Deliberately the same jade as
+      // everything else: a brighter dot here reads as an aim point, and the catch
+      // point is the paddle centre, not the hub.
+      ctx.beginPath(); ctx.arc(hubx,0,3.6,0,6.2832);
+      ctx.fillStyle=jade(.95); ctx.fill();
+      ctx.restore();
+    }
+
+    // escape sparks
+    for(let i=sparks.length-1;i>=0;i--){
+      const s=sparks[i]; s.l-=0.045;
+      if(s.l<=0){sparks.splice(i,1);continue;}
+      const d=(1-s.l)*s.s;
+      ctx.strokeStyle=`rgba(255,181,69,${s.l*0.8})`;ctx.lineWidth=1.4;
+      ctx.beginPath();
+      ctx.moveTo(s.x+Math.cos(s.a)*d*0.6,s.y+Math.sin(s.a)*d*0.6);
+      ctx.lineTo(s.x+Math.cos(s.a)*d,s.y+Math.sin(s.a)*d);
+      ctx.stroke();
+    }
+
+    // trail
+    for(let i=0;i<trail.length;i++){
+      const p=trail[i],k=i/trail.length;
+      ctx.fillStyle=`rgba(255,216,107,${k*k*0.42})`;
+      ctx.beginPath();ctx.arc(p.x,p.y,1.2+k*2.9,0,6.2832);ctx.fill();
+    }
+
+    // "it has seen you", a cyan arc on the side the threat is coming from,
+    // brightness = how hard the looming detectors are being driven right now
+    if(!caught && alert>0.02 && hand.seen){
+      const ang=Math.atan2(hand.y-fly.y,hand.x-fly.x);
+      ctx.save();ctx.translate(fly.x,fly.y);ctx.rotate(ang);
+      ctx.strokeStyle=`rgba(63,224,164,${Math.min(0.92,alert*1.15)})`;
+      ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(0,0,17+alert*10,-0.9,0.9);ctx.stroke();
+      ctx.globalAlpha=Math.min(0.5,alert*0.6);
+      ctx.beginPath();ctx.arc(0,0,26+alert*14,-0.6,0.6);ctx.stroke();
+      ctx.restore();
+    }
+
+    // the fly, always the brightest thing on screen, with its own halo so it
+    // never gets lost against the neurons behind it
+    if(!caught){
+      const halo=ctx.createRadialGradient(fly.x,fly.y,0,fly.x,fly.y,30);
+      halo.addColorStop(0,"rgba(255,216,107,.36)");
+      halo.addColorStop(.45,"rgba(255,181,69,.12)");
+      halo.addColorStop(1,"rgba(255,181,69,0)");
+      ctx.fillStyle=halo;ctx.beginPath();ctx.arc(fly.x,fly.y,30,0,6.2832);ctx.fill();
+
+      ctx.save();ctx.translate(fly.x,fly.y);ctx.rotate(fly.head);
+      const beat=Math.sin(now/(20-alert*9))*0.5+0.5;
+      ctx.fillStyle=`rgba(245,238,255,${0.20+beat*0.20})`;
+      ctx.beginPath();ctx.ellipse(-1.5,-7.5,9.5,4,-0.5,0,6.2832);ctx.fill();
+      ctx.beginPath();ctx.ellipse(-1.5, 7.5,9.5,4, 0.5,0,6.2832);ctx.fill();
+      ctx.fillStyle="#ffd86b";
+      ctx.beginPath();ctx.ellipse(0,0,10,5.2,0,0,6.2832);ctx.fill();
+      ctx.fillStyle="#ff9a3d";
+      ctx.beginPath();ctx.arc(8.2,0,3.9,0,6.2832);ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // ───────────────────────── HUD
+  const popsEl=document.getElementById("pops");
+  const bars=[];
+  POPS.forEach((p,i)=>{
+    const el=document.createElement("div");el.className="pop";
+    const hex="#"+p.col.map(c=>Math.round(c*255).toString(16).padStart(2,"0")).join("");
+    el.innerHTML=`<div class="name"><span class="dot" style="background:${hex}"></span>${p.label}</div>
+                  <div class="role">${p.role}</div><div class="bar"><i></i></div>`;
+    popsEl.appendChild(el);
+    const bar=el.querySelector("i");bar.style.background=hex;bars.push(bar);
+  });
+
+  const LESIONS=[{p:0,t:"LC4 + LPLC2"},{p:1,t:"LPLC1 + LC6"},{p:P_GF,t:"Giant fiber"}];
+  const lb=document.getElementById("lesion-btns");
+  LESIONS.forEach(({p,t})=>{
+    const b=document.createElement("button");
+    b.type="button";b.textContent=t;b.setAttribute("aria-pressed","false");
+    b.onclick=()=>{lesioned[p]=lesioned[p]?0:1;b.setAttribute("aria-pressed",lesioned[p]?"true":"false");};
+    lb.appendChild(b);
+  });
+  document.getElementById("mem-reset").onclick=()=>{
+    for(const e of plasticIdx){pw[e]=1;wEff[e]=wMv[e];}
+    kcTrace.fill(0); binLearned.fill(0); drawMemory();
+  };
+
+  // group the plastic synapses by the direction their Kenyon cell prefers, so the
+  // dial below is a direct picture of KC->MBON weights, not a separate score.
+  const MEM_BINS=12;
+  const binLearned=new Float32Array(12);
+  const binOf=plasticIdx.map(e=>{
+    let a=(kcPref[pre[e]]+1)/2; a=Math.min(0.999,Math.max(0,a));
+    return Math.floor(a*MEM_BINS)%MEM_BINS;
+  });
+  const memCv=document.getElementById("memory"), memCtx=memCv.getContext("2d");
+  const binSum=new Float32Array(MEM_BINS), binN=new Float32Array(MEM_BINS);
+  for(let k=0;k<binOf.length;k++) binN[binOf[k]]++;
+  function refreshLearned(){
+    binSum.fill(0);
+    for(let k=0;k<plasticIdx.length;k++) binSum[binOf[k]]+=pw[plasticIdx[k]];
+    for(let b=0;b<MEM_BINS;b++){
+      const mean=binN[b]?binSum[b]/binN[b]:1;
+      binLearned[b]=Math.max(0,Math.min(1,(1-mean)/(1-PW_FLOOR)));
+    }
+  }
+  function drawMemory(){
+    refreshLearned();
+    memCtx.clearRect(0,0,200,200);
+    const cx=100, cy=100, r0=34, r1=88;
+    let worst=0;
+    for(let b=0;b<MEM_BINS;b++){
+      const learned=binLearned[b];
+      worst=Math.max(worst,learned);
+      const a0=(b/MEM_BINS)*6.2832-Math.PI-0.02, a1=((b+1)/MEM_BINS)*6.2832-Math.PI+0.02;
+      memCtx.beginPath();
+      memCtx.arc(cx,cy,r0+(r1-r0)*(0.18+0.82*learned),a0,a1);
+      memCtx.arc(cx,cy,r0,a1,a0,true);
+      memCtx.closePath();
+      memCtx.fillStyle=`rgba(${Math.round(90+165*learned)},${Math.round(120-50*learned)},${Math.round(190-90*learned)},${0.22+0.68*learned})`;
+      memCtx.fill();
+    }
+    memCtx.strokeStyle="rgba(138,123,166,.35)";memCtx.lineWidth=1.5;
+    memCtx.beginPath();memCtx.arc(cx,cy,r0,0,6.2832);memCtx.stroke();
+    memCtx.beginPath();memCtx.arc(cx,cy,r1,0,6.2832);memCtx.stroke();
+    document.getElementById("mem-note").textContent =
+      worst<0.06?"naive":worst<0.3?"learning":worst<0.62?"wary":"conditioned";
+  }
+
+  const eEsc=document.getElementById("n-esc"),eT=document.getElementById("n-time"),eG=document.getElementById("n-gain");
+  function updateHud(){
+    eEsc.textContent=escapes;
+    eT.innerHTML=((performance.now()-t0)/1000).toFixed(1)+'<span style="font-size:15px;color:var(--muted)">s</span>';
+    eG.textContent=gain.toFixed(2);
+    drawMemory();
+    for(let p=0;p<POPS.length;p++)
+      bars[p].style.right=(100-Math.min(100,popRate[p]*100/0.28))+"%";
+  }
+
+  function doCaught(){
+    caught=true;
+    document.getElementById("c-time").textContent=((performance.now()-t0)/1000).toFixed(1)+"s";
+    document.getElementById("c-esc").textContent=escapes;
+    document.getElementById("caught").classList.add("on");
+  }
+  document.getElementById("again").onclick=reset;
+
+  bootEl.classList.add("gone");
+  requestAnimationFrame(frame);
+}
+})();
+</script>
+
+</body>
+</html>
