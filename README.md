@@ -158,8 +158,11 @@ efference copy that cancels self-generated optic flow.
 
 Three static files, no build step: `index.html`, `flydata.json`, `og.png`.
 
-On Cloudflare Pages: connect the repo, framework preset **None**, build command
-**empty**, output directory `/`, then attach the domain. Any static host works.
+On Cloudflare, connect the repo and leave the build command empty. The Workers
+flow deploys with `npx wrangler deploy` and reads `wrangler.jsonc`, which serves
+the repo root as static assets with no Worker script. The older Pages flow needs
+no config at all: framework preset **None**, build command empty, output
+directory `/`. Either works, as does any other static host.
 
 > [!WARNING]
 > `og:image`, `twitter:image` and `og:url` are absolute against
