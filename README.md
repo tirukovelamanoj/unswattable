@@ -158,11 +158,20 @@ efference copy that cancels self-generated optic flow.
 
 Three static files, no build step: `index.html`, `flydata.json`, `og.png`.
 
-On Cloudflare, connect the repo and leave the build command empty. The Workers
-flow deploys with `npx wrangler deploy` and reads `wrangler.jsonc`, which serves
-the repo root as static assets with no Worker script. The older Pages flow needs
-no config at all: framework preset **None**, build command empty, output
-directory `/`. Either works, as does any other static host.
+Deployed on Vercel. No configuration file and no build step: import the repo,
+framework preset **Other**, leave the build command empty, output directory is
+the repo root.
+
+For the custom domain, add it in the Vercel project and point a CNAME at it from
+wherever DNS lives:
+
+| record | value |
+|---|---|
+| `fly` CNAME | `cname.vercel-dns.com` |
+
+Any static host works equally well. The one thing to check before picking one is
+whether it can attach a custom domain without taking over the whole DNS zone.
+Cloudflare Workers cannot, which rules it out if your DNS lives elsewhere.
 
 > [!WARNING]
 > `og:image`, `twitter:image` and `og:url` are absolute against
