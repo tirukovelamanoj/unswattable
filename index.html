@@ -117,9 +117,12 @@
   #caught{
     position:fixed; inset:0; z-index:4; display:none;
     place-items:center; background:rgba(11,7,17,.85); backdrop-filter:blur(3px);
-    cursor:default;
+    cursor:default; opacity:0; transition:opacity .45s ease;
   }
+  /* display is not transitionable, so .on reveals it and .vis fades it in on the
+     next frame. Without the two-step the card snaps in after a slow build. */
   #caught.on{display:grid;}
+  #caught.vis{opacity:1;}
   #caught .box{text-align:center; padding:0 24px;}
   #caught h2{
     font-family:var(--cond); font-weight:700; font-size:clamp(34px,7vw,64px);
@@ -219,6 +222,7 @@ const DAN_DRIVE=1.6;
 const LEARN_RATE=0.055;    // per-frame depression while dopamine and KC coincide
 const PW_FLOOR=0.22;
 const LEARN_BOOST=1.7;
+const CATCH_DUR=1.6;       // seconds of impact sequence before the score card
 const SELF_FLOW=0.18;      // how much self-generated optic flow survives efference copy
 const SWAT_ANG=Math.PI*0.3;   // fixed grip angle, the swatter does not swivel
 // Handle length as a multiple of paddle width. Real swatters sit near 3.5:1
@@ -337,6 +341,7 @@ function start(D){
   const scene=new THREE.Scene();
   const CAM_Z=2.45;
   const camera=new THREE.PerspectiveCamera(46,1,0.1,50);
+  let camBaseZ=0;   // declared here: resize() runs before the later let-block
   camera.position.set(0,0,CAM_Z);
   const world=new THREE.Group(); scene.add(world);
 
@@ -417,6 +422,7 @@ function start(D){
     camera.aspect=W/H;
     const th=Math.tan(camera.fov*Math.PI/360);
     camera.position.z=Math.min(5.0,Math.max(2.55,Math.max(1.58/(th*camera.aspect),1.14/th)));
+    camBaseZ=camera.position.z;          // the resting framing distance to push in from
     camera.updateProjectionMatrix();
     cvG.width=W*DPR;cvG.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
   }
@@ -448,12 +454,13 @@ function start(D){
   placeFly();
   const kcTrace=new Float32Array(N);
   let lastAz=0, learnPulse=0;
+  let catchT=-1, catchX=0, catchY=0, catchHX=0, catchHY=0, debris=[];
   const learnedGainOf=az=>binLearned[Math.min(11,Math.max(0,Math.floor((az+1)/2*12)))%12];
   let wanderHead=Math.random()*6.28, nextSaccade=0, perchUntil=0, alert=0, boostUntil=0;
 
   function reset(){
       escapes=0;t0=performance.now();gain=1.0;caught=false;trail=[];sparks=[];
-    resetBrain();document.getElementById("caught").classList.remove("on");
+    resetBrain();document.getElementById("caught").classList.remove("on","vis");
   }
 
   function onMove(e){
@@ -650,15 +657,52 @@ function start(D){
       if(loom>0.02) perchUntil=0;   // a startled fly does not sit still
     }
 
+    // impact sequence: slow-mo debris, then the lights go out in the brain
+    if(caught && catchT>=0){
+      catchT+=dt;
+
+      // HIT STOP: near-total freeze for 90ms, then slow motion, then ease back to
+      // speed. Fighting games use this because a constant slow-mo reads as lag,
+      // while a hard stop followed by a ramp reads as impact.
+      const ts = catchT<0.09 ? 0.04
+               : catchT<0.75 ? 0.30
+               : Math.min(1, 0.30+(catchT-0.75)*1.1);
+
+      // the circuit blazes once, then goes out. a monotonic fade just looked like
+      // someone turning down a dimmer.
+      const decay = catchT<0.22 ? Math.pow(0.80,dt) : Math.pow(0.045,dt);
+      for(let i=0;i<N;i++) act[i]*=decay;
+
+      for(let i=debris.length-1;i>=0;i--){
+        const d=debris[i];
+        d.x+=d.vx*dt*ts; d.y+=d.vy*dt*ts;
+        d.vy+=150*dt*ts; d.vx*=0.985; d.vy*=0.985;
+        d.l-=dt*ts/0.55;
+        if(d.l<=0) debris.splice(i,1);
+      }
+      if(catchT>=CATCH_DUR){ catchT=-1; showScore(); }
+    }
+
     // visuals
     for(let i=0;i<N;i++) actAttr.array[i]=act[i];
     actAttr.needsUpdate=true;
     paintEdges();
 
+    // impact shake and push-in. both canvases move together or it separates.
+    let shX=0, shY=0;
+    if(caught && catchT>=0 && !reduced){
+      const amp=Math.exp(-catchT*10)*15;
+      shX=(Math.random()-0.5)*amp; shY=(Math.random()-0.5)*amp;
+    }
+    if(camBaseZ){
+      const push = (caught&&catchT>=0) ? 1-Math.pow(1-Math.min(1,catchT/1.5),3) : 0;
+      camera.position.z = camBaseZ - 0.30*push;
+      camera.position.x = shX*0.0016; camera.position.y = -shY*0.0016;
+    }
     const wob=reduced?0:Math.sin(now/5200)*0.30;
     world.rotation.y=wob; world.rotation.x=-0.10+(reduced?0:Math.sin(now/7100)*0.05);
     renderer.render(scene,camera);
-    draw2d(now);
+    draw2d(now,shX,shY);
   }
 
   function paintEdges(){
@@ -696,22 +740,26 @@ function start(D){
   }
 
   // ───────────────────────── 2D overlay: the fly, the hand, the strike
-  function draw2d(now){
+  function draw2d(now,shX,shY){
     ctx.clearRect(0,0,W,H);
+    ctx.save(); ctx.translate(shX||0, shY||0);
 
     // the swatter. the paddle's mid-edge sits exactly on the catch radius, so
     // what you see is very close to what it can actually hit (hit test stays circular); the wide soft glow is the apparent size the fly's
     // looming detectors respond to, which is much larger.
-    if(hand.seen&&!caught){
-      const g=ctx.createRadialGradient(hand.x,hand.y,0,hand.x,hand.y,HAND_R);
+    const striking = caught && catchT>=0;
+    if(hand.seen && (!caught || striking)){
+      const hx = striking?catchHX:hand.x, hy = striking?catchHY:hand.y;
+      const squash = striking ? 1+0.30*Math.exp(-catchT*9) : 1;   // the hit itself
+      const g=ctx.createRadialGradient(hx,hy,0,hx,hy,HAND_R);
       g.addColorStop(0,"rgba(63,224,164,.15)");
       g.addColorStop(.55,"rgba(63,224,164,.05)");
       g.addColorStop(1,"rgba(63,224,164,0)");
-      ctx.fillStyle=g;ctx.beginPath();ctx.arc(hand.x,hand.y,HAND_R,0,6.2832);ctx.fill();
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(hx,hy,HAND_R,0,6.2832);ctx.fill();
 
       const R=REACH, HL=HANDLE_LEN;
       const jade=a=>`rgba(63,224,164,${a})`;
-      ctx.save(); ctx.translate(hand.x,hand.y); ctx.rotate(SWAT_ANG);
+      ctx.save(); ctx.translate(hx,hy); ctx.rotate(SWAT_ANG); ctx.scale(squash,1/squash);
       ctx.lineCap="round"; ctx.lineJoin="round";
 
       // Handle: a SOLID strip with the hang hole genuinely punched through it,
@@ -756,6 +804,30 @@ function start(D){
       ctx.beginPath(); ctx.arc(hubx,0,3.6,0,6.2832);
       ctx.fillStyle=jade(.95); ctx.fill();
       ctx.restore();
+    }
+
+    // impact. rings, a flash at the contact point, and the fly coming apart.
+    if(caught && catchT>=0){
+      for(let r=0;r<3;r++){
+        const t=(catchT-r*0.14)/1.0;
+        if(t>0&&t<1){
+          ctx.strokeStyle=`rgba(63,224,164,${(1-t)*0.55})`;
+          ctx.lineWidth=0.6+2.6*(1-t);
+          ctx.beginPath(); ctx.arc(catchX,catchY,10+t*150,0,6.2832); ctx.stroke();
+        }
+      }
+      if(catchT<0.30){
+        const f=1-catchT/0.30;
+        const fg=ctx.createRadialGradient(catchX,catchY,0,catchX,catchY,70*f+18);
+        fg.addColorStop(0,`rgba(255,250,235,${f*0.75})`);
+        fg.addColorStop(1,"rgba(255,240,200,0)");
+        ctx.fillStyle=fg;
+        ctx.beginPath(); ctx.arc(catchX,catchY,70*f+18,0,6.2832); ctx.fill();
+      }
+      for(const d of debris){
+        ctx.fillStyle=`rgba(255,216,107,${Math.max(0,d.l)*0.85})`;
+        ctx.beginPath(); ctx.arc(d.x,d.y,d.r,0,6.2832); ctx.fill();
+      }
     }
 
     // escape sparks
@@ -809,6 +881,17 @@ function start(D){
       ctx.fillStyle="#ff9a3d";
       ctx.beginPath();ctx.arc(8.2,0,3.9,0,6.2832);ctx.fill();
       ctx.restore();
+    }
+    ctx.restore();                       // end shake transform
+
+    // the world narrows onto the kill as the brain dies
+    if(caught && catchT>=0){
+      const v=Math.min(1,catchT/1.3), far=Math.max(W,H);
+      const vg=ctx.createRadialGradient(catchX,catchY,far*(0.42-0.26*v),
+                                        catchX,catchY,far*(1.05-0.42*v));
+      vg.addColorStop(0,"rgba(11,7,17,0)");
+      vg.addColorStop(1,`rgba(11,7,17,${0.92*v})`);
+      ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
     }
   }
 
@@ -891,9 +974,24 @@ function start(D){
 
   function doCaught(){
     caught=true;
+    // freeze where it happened and hold the score card back; the sequence below
+    // plays first, otherwise the catch is invisible and the card just appears.
+    catchT=0; catchX=fly.x; catchY=fly.y; catchHX=hand.x; catchHY=hand.y;
+    for(let i=0;i<N;i++) act[i]=1;      // the whole circuit flares on impact
+    debris=[];
+    for(let i=0;i<34;i++){
+      const a=Math.random()*6.2832, sp=40+Math.random()*190;
+      debris.push({x:fly.x,y:fly.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
+                   r:0.8+Math.random()*2.2,l:1});
+    }
+    return;
+  }
+  function showScore(){
     document.getElementById("c-time").textContent=((performance.now()-t0)/1000).toFixed(1)+"s";
     document.getElementById("c-esc").textContent=escapes;
-    document.getElementById("caught").classList.add("on");
+    const card=document.getElementById("caught");
+    card.classList.add("on");
+    requestAnimationFrame(()=>card.classList.add("vis"));
   }
   document.getElementById("again").onclick=reset;
 
