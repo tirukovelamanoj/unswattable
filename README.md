@@ -1,71 +1,201 @@
+<div align="center">
+
 # Unswattable
 
-Try to swat a fruit fly. It dodges you using a real connectome, simulated live in
-the browser.
+**A fruit fly dodges your cursor using its real connectome, 1,984 neurons
+simulated live in your browser, and learns the direction you keep striking from.**
 
-The escape circuit is traced from FlyWire FAFB v783: looming detectors (LC4,
-LPLC2) converge on the giant fiber (DNp01) and the steering neuron (DNa02),
-exactly as published. Nothing sits between the spikes and the movement, so when
-you silence a population with the lesion buttons the fly genuinely goes blind to
-you.
+[![Play](https://img.shields.io/badge/play-fly.manojtirukovela.com-3fe0a4?style=flat-square)](https://fly.manojtirukovela.com)
+[![Data](https://img.shields.io/badge/data-FlyWire%20FAFB%20v783-e0609f?style=flat-square)](https://flywire.ai)
+[![Neurons](https://img.shields.io/badge/neurons-1,984-49d6e8?style=flat-square)](#the-circuit)
+[![Three.js](https://img.shields.io/badge/three.js-r128-ffb545?style=flat-square)](https://threejs.org/)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
-It also learns. The mushroom body (900 Kenyon cells, 96 MBONs, 150 dopaminergic
-neurons) conditions on the direction you keep attacking from, via the real
-plasticity rule: a Kenyon cell active at the same time as dopamine has that
-synapse depressed. The dial in the corner is drawn straight from those weights.
+[Play](https://fly.manojtirukovela.com) ·
+[Quick start](#quick-start) ·
+[The circuit](#the-circuit) ·
+[How it learns](#how-it-learns) ·
+[Real vs modelled](#real-vs-modelled) ·
+[Deploy](#deploying)
 
-## Numbers
+![Unswattable](og.png)
 
-| | |
+</div>
+
+Move your cursor at the fly. Looming detectors in its optic lobes measure how
+fast you are growing on its retina, that signal converges on the giant fiber,
+and the fly takes off. Everything you see firing is a real neuron with a real
+name and a published paper behind it.
+
+There is **nothing between the spikes and the movement**. No pathfinding, no
+"if cornered then dodge", no difficulty script. Sensory input goes into the
+connectome, descending neurons come out, and those move the fly. Silence a
+population with the lesion buttons and it genuinely goes blind to you.
+
+---
+
+## Quick start
+
+It fetches `flydata.json`, so it needs a server rather than opening the file
+directly.
+
+```bash
+git clone git@github.com:tirukovelamanoj/unswattable.git && cd unswattable
+python3 -m http.server 8000
+```
+
+Open <http://127.0.0.1:8000>. No build step, no dependencies, no install.
+
+## Features
+
+- **Real connectome, not a diagram.** 1,984 neurons and 17,716 synapses pulled
+  from FlyWire FAFB v783, with real synapse counts and real excitatory or
+  inhibitory signs from predicted neurotransmitters.
+- **Leaky integrate-and-fire**, 18 substeps per frame, about 9ms of brain time
+  per rendered frame, so the reflex runs at roughly biological speed.
+- **It learns.** The mushroom body conditions on the bearing you attack from,
+  using the fly's own plasticity rule.
+- **Lesion controls.** Silence LC4 and LPLC2 and it stops seeing you mid-game.
+  This is the honest test, and it is a button rather than a claim.
+- **Efference copy.** The fly cancels the optic flow its own flight creates, so
+  it can fly past a motionless cursor without panicking.
+- **The whole brain rendered**, 52,000 neurons as a dim point cloud for shape,
+  with the active circuit glowing inside it.
+
+## The circuit
+
+Seeded from the looming detectors and the descending neurons, then everything on
+the path between them.
+
+| population | role | count |
+|---|---|---|
+| LC4, LPLC2 | looming detectors | 314 |
+| LPLC1, LC6 | wide-field visual | 265 |
+| interneurons | central brain | 184 |
+| Kenyon cells | mushroom body, sparse odour code | 900 |
+| MBON | learned output | 96 |
+| PAM, PPL1 | dopamine, the teaching signal | 150 |
+| DNa02 | steering command | 2 |
+| DNp01 and escape DNs | giant fiber, takeoff | 10 |
+
+The convergence is real and strong. LC4 alone puts 1,850 synapses onto DNp04 and
+757 onto DNp01, which is the giant fiber, the single most studied escape neuron
+in any insect.
+
+## How it learns
+
+The mushroom body is the one place a fly actually learns, and biology supplies
+the training rule for free.
+
+```
+ your approach bearing ──► Kenyon cells (900, about 5% fire per bearing)
+                                │  KC to MBON synapse   ← the plastic site
+                                ▼
+                              MBON31/32 ──┤ DNa02 ──► which way it turns
+                                ▲            96 GABA synapses, inhibitory
+                    dopamine fires on a near miss
+```
+
+A Kenyon cell active at the same moment as dopamine has that synapse depressed.
+Nothing else in the 17,716 changes, ever. The dial in the corner is drawn
+directly from those 3,988 weights, not from a separate score.
+
+Because the Kenyon code is **sparse**, only about 5% of cells fire for a given
+bearing, so depressing "the cells that were just active" barely touches the other
+eleven directions. That is why it conditions one bearing cleanly instead of
+smearing, and it is the same reason sparse representations resist catastrophic
+interference in machine learning.
+
+### Measured
+
+Same scripted chaser every trial, given a human reaction time of 170ms, shaky
+aim, and always approaching from the upper left. 25 second cap.
+
+| | run times (s) | median |
+|---|---|---|
+| naive | 0.5, 0, 15.4, 4.2, 13.6, 14.1 | 13.6 |
+| after 80 strikes from the upper left | 25, 25, 25, 22.4, 21.2, 9.8 | **25.0** |
+
+Three of six conditioned runs ran out the clock, so the true median is above the
+ceiling. Six trials per arm and the naive arm swings from 0 to 15s on spawn luck,
+so treat the size as soft and the direction as solid.
+
+Conditioning is also direction specific. After 77 strikes from one bearing, the
+three dial wedges covering it moved and the other nine did not:
+
+| bearing bin | 0 | 1 | 2 | 3 to 11 |
+|---|---|---|---|---|
+| change | +0.86 | +0.90 | +0.80 | 0 |
+
+> [!NOTE]
+> Memory persists across rounds within a session so it can accumulate, and
+> **Reset memory** restores all 3,988 synapses to their unlearned weights.
+
+## Real vs modelled
+
+The interesting claim is that this is real, so the boundary is worth stating
+precisely. Every one of these is labelled in the source where it happens.
+
+**Real.** Every neuron, every synapse, the synapse counts, the excitatory and
+inhibitory signs, the topology, the dopamine-gated depression rule, and the
+efference copy that cancels self-generated optic flow.
+
+**Modelled.**
+
+| | what | why |
+|---|---|---|
+| Receptive fields | approximated from each neuron's position in its optic lobe | real retinotopy is measured, not inferred from soma position |
+| Kenyon input | driven by a direction code | real Kenyon cells encode odour, not bearing |
+| Learned threat gain | learned danger raises the looming gain | no MBON in the connectome touches DNp01, so learning cannot reach the escape threshold through real wiring. It reaches steering, via MBON31/32 onto DNa02, and that alone is too subtle to feel |
+| Flight | speed, drag, saccade timing | tuned game physics, downstream of the brain's decision |
+
+> [!IMPORTANT]
+> The line between real and tuned runs exactly at the descending neurons. The
+> brain decides **when** to escape and biases **which way**. How fast the fly
+> then flies is game code.
+
+## Deploying
+
+Three static files, no build step: `index.html`, `flydata.json`, `og.png`.
+
+On Cloudflare Pages: connect the repo, framework preset **None**, build command
+**empty**, output directory `/`, then attach the domain. Any static host works.
+
+> [!WARNING]
+> `og:image`, `twitter:image` and `og:url` are absolute against
+> `fly.manojtirukovela.com`. Change them if the domain moves, or link previews
+> will point at the old host.
+
+A container would be the wrong shape here. The simulation runs entirely in the
+visitor's browser, so there is no server state, no server compute, and nothing
+to keep warm.
+
+## Rebuilding the data
+
+`flydata.json` is generated, not hand-made.
+
+```bash
+uv run --with pandas --with numpy python build_data.py
+```
+
+It needs two inputs, both public and free:
+
+| file | source |
 |---|---|
-| neurons | 1,984 |
-| synapses | 17,716 |
-| plastic (KC to MBON) | 3,988 |
-| model | leaky integrate and fire, 9 ms brain time per frame |
+| `Supplemental_file1_neuron_annotations.tsv` | [flyconnectome/flywire_annotations](https://github.com/flyconnectome/flywire_annotations) |
+| `connections_783.csv.gz` | `storage.googleapis.com/flywire-data/codex/data/fafb/783/connections.csv.gz` |
 
-## Run it
+The script selects the circuit, keeps one hemisphere of the mushroom body to
+hold the simulation cost down, assigns Kenyon bearings from a seeded RNG so the
+code is stable between builds, and packs everything as base64 typed arrays.
 
-Needs a server, not a file:// open, because it fetches `flydata.json`.
+## Credits
 
-    python3 -m http.server 8000
-    # http://localhost:8000
+Connectome data is FlyWire FAFB v783, [Dorkenwald et al., *Nature* 2024](https://doi.org/10.1038/s41586-024-07558-y)
+and [Schlegel et al., *Nature* 2024](https://doi.org/10.1038/s41586-024-07686-5),
+used under CC-BY.
 
-## Deploy
-
-Three files, entirely static, no build step: `index.html`, `flydata.json`
-and `og.png` (link preview). Any static host works, no build command, output
-directory is the repo root.
-
-Deployed at https://fly.manojtirukovela.com on Cloudflare Pages: no build
-command, output directory is the repo root. The `og:image`, `twitter:image` and
-`og:url` meta tags are absolute against that host, so change them if the domain
-moves.
-
-## What is real and what is not
-
-Real: every neuron, every synapse, the synapse counts, the excitatory and
-inhibitory signs from predicted neurotransmitters, and the topology.
-
-Also real, and worth knowing about: the looming detectors receive an efference
-copy, so the optic flow the fly generates by its own flight is largely cancelled
-before it reaches them. This is why it can fly straight past a motionless cursor
-without reacting, but bolts from one that moves. Flies do exactly this, using a
-corollary discharge of their own motor commands.
-
-Modelled, and labelled as such in the code and in the page footer:
-
-- Receptive fields are approximated from each neuron's position in its optic
-  lobe. Real retinotopy is measured, not inferred from soma position.
-- Kenyon cells are driven by a direction code. Real Kenyon cells encode odour.
-- Learned danger raises the looming gain. In the connectome the only mushroom
-  body output reaching this circuit is MBON31/32 onto DNa02, which steers; no
-  MBON touches DNp01, so a learned change cannot alter the escape threshold
-  through real wiring.
-- Flight speed, drag and saccade timing are tuned game physics downstream of the
-  brain's decision.
-
-## Data
-
-FlyWire FAFB v783, Dorkenwald et al., Nature 2024, CC-BY.
-Rebuild `flydata.json` with `build_data.py` (needs the FlyWire annotation TSV and
-the v783 connection table).
+> [!NOTE]
+> MIT in `LICENSE` covers the code. The connectome data carries its own CC-BY
+> licence with an attribution requirement, which is met in the page footer and
+> here. The two are not the same licence.
