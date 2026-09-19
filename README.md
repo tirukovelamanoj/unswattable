@@ -49,14 +49,16 @@ Open <http://127.0.0.1:8000>. No build step, no dependencies, no install.
 ## Features
 
 - **Real connectome, not a diagram.** 1,984 neurons and 17,716 synapses pulled
-  from FlyWire FAFB v783, with real synapse counts and real excitatory or
-  inhibitory signs from predicted neurotransmitters.
+  from FlyWire FAFB v783, the reconstruction of a full adult fly brain, with
+  real synapse counts and real excitatory or inhibitory signs from predicted
+  neurotransmitters.
 - **Leaky integrate-and-fire**, 18 substeps per frame, about 9ms of brain time
   per rendered frame, so the reflex runs at roughly biological speed.
 - **It learns.** The mushroom body conditions on the bearing you attack from,
   using the fly's own plasticity rule.
-- **Lesion controls.** Silence LC4 and LPLC2 and it stops seeing you mid-game.
-  This is the honest test, and it is a button rather than a claim.
+- **Lesion controls.** Silence LC4 and LPLC2, the two neuron types that detect
+  an approaching object, and it stops seeing the cursor mid-game. This is the
+  honest test, and it is a button rather than a claim.
 - **Efference copy.** The fly cancels the optic flow its own flight creates, so
   it can fly past a motionless cursor without panicking.
 - **The whole brain rendered**, 52,000 neurons as a dim point cloud for shape,
